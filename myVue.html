@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="cn-zn">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vue练习</title>
+</head>
+
+<body>
+    <!-- <script>
+      var str = "12345678901";
+    //   var re = /^(\d)(?=(\d{3})+)/g;
+      var re = /(\d{3})/g;
+      let a = str.match(re)
+      console.log(a);
+      let c = str.replace(re, function(match, position, originalText) {
+        console.log(match, position, originalText, " 项");
+      });
+
+      console.log(a, " match");
+      console.log(RegExp.$1, RegExp.$2, RegExp.$3, " 分组");
+    </script> -->
+
+    <ul id="app">
+        <input class="zs" v-model="age"></input>
+        <p></p>
+        {{age}}
+    </ul>
+       <!--   <li tag='a'>{{gender.man}}</li>
+        <li v-html='html'></li>
+        <li v-text='text'></li> -->
+    <script>
+        let obj = {
+            name: "zs",
+            age: 23,
+        };
+
+        class VUE {
+            constructor(options) {
+                if (this.isElement(options.el)) {
+                    this.$el = options.$el;
+                } else {
+                    this.$el = document.querySelector(options.el);
+                }
+                this.$data = options.data;
+                new Observer(this.$data)
+                new Compiler(this);
+            }
+            isElement(node) {
+                return node.nodeType === 1
+            }
+        }
+        class Observer {
+            constructor(options) {
+                this.observer(options);
+            }
+            observer(options) {
+                if (options instanceof Object) {
+                    for (let key in options) {
+                        if (Object.prototype.hasOwnProperty.call(options, key)) {
+                            this.observer(options[key]);
+                            this.defineReactive(options, key, options[key]);
+                        }
+                    }
+                }
+            }
+            defineReactive(options, key, value) {
+                let dep = new Dep();
+                Object.defineProperty(options, key, {
+                    enumerable: true,
+                    configurable: true,
+                    get: () => {
+                        Dep.target && dep.addSub(Dep.target)
+                        return value;
+                    },
+                    set: (newValue) => {
+                        if (value !== newValue) {
+                            value = newValue;
+                            dep.notify();
+                            this.observer(options[key]);
+                        }
+                    },
+                });
+            }
+        }
+        class Compiler {
+            constructor(node) {
+                this.vm = node;
+                this.fragment = this.fragment(this.vm.$el);
+                this.vm.$el.appendChild(this.fragment)
+            }
+            fragment(app) {
+                let fragment = document.createDocumentFragment();
+                let node = app.firstChild;
+                while (node) {
+                    fragment.appendChild(node)
+                    node = app.firstChild
+                }
+                this.buildTemplate(fragment);
+                return fragment
+            }
+            buildTemplate(node) {
+                let nodeList = [...node.childNodes]
+                nodeList.forEach((node, index) => {
+                    if (this.vm.isElement(node)) {
+                        this.buildElement(node)
+                        this.buildTemplate(node)
+                    } else {
+                        this.buildText(node)
+                    }
+                })
+            }
+            buildElement(node) {
+                let attrs = [...node.attributes];
+                attrs.forEach((value => {
+                    if (value.name.startsWith("v-")) {
+                        let directive = value.name.split("-")[1];
+                        CompilerUtil[directive](node, this.vm, value.value);
+                    }
+                }))
+            }
+            buildText(node) {
+                let reg = /\{\{(.+?)\}\}/
+                let content = node.nodeValue.match(reg);
+                if(content){
+                    let value = content[1];
+                    CompilerUtil["content"](node, this.vm, value);
+                }
+            }
+        }
+        let CompilerUtil = {
+            setValue(vm, str, newValue){
+                let items = str.split(".")
+                items.reduce((pre, current, index, array) => {
+                    if(index === items.length - 1){
+                        pre[current] = newValue
+                    }
+                    return pre[current]
+                }, vm)
+            },
+            "model"(node, vm, value) {
+                new Watcher(vm.$data, value, (newValue, oldValue) => {
+                  node.value = newValue
+                })
+                let value1 = this.getObjectValue(vm.$data, value)
+                node.value = value1
+
+                node.addEventListener("input", (e) => {
+                    this.setValue(vm.$data, value, e.target.value)
+                })
+            },
+            "content"(node, vm, value){
+                new Watcher(vm.$data, value, (newValue, oldValue) => {
+                  node.nodeValue = newValue
+                })
+                let value1 = this.getObjectValue(vm.$data, value)
+                node.nodeValue = value1
+            },
+            "text"(node, vm, value) {
+                node.innerText = this.getObjectValue(vm, value)
+            },
+            "html"(node, vm, value){
+                node.innerHTML = this.getObjectValue(vm, value)
+             },
+             getObjectValue(vm, str){
+                let items = str.split(".")
+                return items.reduce((pre, current) => {
+                    return pre[current]
+                }, vm)
+            }
+        }
+      
+        class Watcher{
+            constructor(vm, attr, cb){
+                this.vm = vm;
+                this.attr = attr;
+                this.cb = cb
+                this.oldValue = this.getOldValue()
+            }
+            getOldValue(){
+                Dep.target = this
+                let oldValue = CompilerUtil.getObjectValue(this.vm, this.attr)
+                Dep.target = null;
+                return oldValue
+            }
+            upData(){
+                let newValue = CompilerUtil.getObjectValue(this.vm, this.attr)
+                if(this.oldValue !== newValue){
+                    this.cb(newValue, this.oldValue)
+                }
+            }
+        }
+
+        class Dep{
+            constructor(){
+                  this.sub = []
+            }
+            addSub(watcher){
+                this.sub.push(watcher)
+            }
+            notify(){
+                this.sub.forEach(watcher => {
+                    watcher.upData()
+                })
+            }
+        }
+        /*  class Observer{
+            constructor(vm, attr, cb){
+                this.vm = vm;
+                this.attr = attr;
+                this.cb = cb
+                this.oldValue = this.getOldValue()
+            }
+        } */
+
+
+
+        let vm = new VUE({
+            el: "#app",
+            data: {
+                // name: "zs",
+                age: 23,
+                // gender: {
+                //     man: "zs",
+                //     female: "ww"
+                // },
+                // html: "<h1>我是html</h1>",
+                // text: "我是text"
+            }
+        });
+        new Observer(obj);
+        // obj.name = {
+        //     zs: "male",
+        //     ww: "female",
+        // };
+        // obj.name.zs = "23";
+        // obj.name = ""
+
+
+  /*       let obj111 = {
+            name: "zs"
+        }
+        Object.defineProperty(obj111, "name", {
+            get(){
+                console.log("执行了get");
+            },
+            set(newValue){
+
+            }
+        }) */
+    </script>
+</body>
+
+</html>
