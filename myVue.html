@@ -24,18 +24,19 @@
     </script> -->
 
     <ul id="app">
-        <input class="zs" v-model="age"></input>
-        <p></p>
-        {{age}}
+        <input class="zs" v-model="name">
+        {{getName}}
+        <!-- <p v-on:click="myFn">测试click</p> -->
+        <!-- <h1>{{getName}}</h1> -->
     </ul>
-       <!--   <li tag='a'>{{gender.man}}</li>
+    <!--   <li tag='a'>{{gender.man}}</li>
         <li v-html='html'></li>
         <li v-text='text'></li> -->
     <script>
-        let obj = {
-            name: "zs",
-            age: 23,
-        };
+        // let obj = {
+        //     name: "zs",
+        //     age: 23,
+        // };
 
         class VUE {
             constructor(options) {
@@ -45,8 +46,35 @@
                     this.$el = document.querySelector(options.el);
                 }
                 this.$data = options.data;
+                this.proxyData()
+                this.$methods = options.methods
+                this.$computed = options.computed;
+                this.proxyComputed()
                 new Observer(this.$data)
                 new Compiler(this);
+            }
+            proxyData() {
+                for (let key in this.$data) {
+                    Object.defineProperty(this, key, {
+                        enumerable: true,
+                        configurable: true,
+                        get() {
+                            return this.$data[key]
+                        }
+                    })
+                }
+            }
+            proxyComputed(){
+                for(let key in this.$computed){
+                    Object.defineProperty(this.$data, key, {
+                        // enumerable: true,
+                        // configurable: true,
+                        get: () => {
+                            // console.log(this.$data.name, ' 执行了name', key);
+                            return this.$computed[key].call(this)
+                        }
+                    })
+                }
             }
             isElement(node) {
                 return node.nodeType === 1
@@ -73,6 +101,7 @@
                     configurable: true,
                     get: () => {
                         Dep.target && dep.addSub(Dep.target)
+                        // console.log(dep);
                         return value;
                     },
                     set: (newValue) => {
@@ -117,32 +146,39 @@
                 attrs.forEach((value => {
                     if (value.name.startsWith("v-")) {
                         let directive = value.name.split("-")[1];
-                        CompilerUtil[directive](node, this.vm, value.value);
+                        let type = directive.split(":")[1]
+                        directive = directive.split(":")[0]
+                        CompilerUtil[directive](node, this.vm, value.value, type);
                     }
                 }))
             }
             buildText(node) {
                 let reg = /\{\{(.+?)\}\}/
                 let content = node.nodeValue.match(reg);
-                if(content){
+                if (content) {
                     let value = content[1];
                     CompilerUtil["content"](node, this.vm, value);
                 }
             }
         }
         let CompilerUtil = {
-            setValue(vm, str, newValue){
+            setValue(vm, str, newValue) {
                 let items = str.split(".")
                 items.reduce((pre, current, index, array) => {
-                    if(index === items.length - 1){
+                    if (index === items.length - 1) {
                         pre[current] = newValue
                     }
-                    return pre[current]
+                    pre[current]
                 }, vm)
+            },
+            "on"(node, vm, value, type) {
+                node.addEventListener(type, (e) => {
+                    vm.$methods[value].call(vm, e)
+                })
             },
             "model"(node, vm, value) {
                 new Watcher(vm.$data, value, (newValue, oldValue) => {
-                  node.value = newValue
+                    node.value = newValue
                 })
                 let value1 = this.getObjectValue(vm.$data, value)
                 node.value = value1
@@ -151,9 +187,9 @@
                     this.setValue(vm.$data, value, e.target.value)
                 })
             },
-            "content"(node, vm, value){
+            "content"(node, vm, value) {
                 new Watcher(vm.$data, value, (newValue, oldValue) => {
-                  node.nodeValue = newValue
+                    node.nodeValue = newValue
                 })
                 let value1 = this.getObjectValue(vm.$data, value)
                 node.nodeValue = value1
@@ -161,46 +197,47 @@
             "text"(node, vm, value) {
                 node.innerText = this.getObjectValue(vm, value)
             },
-            "html"(node, vm, value){
+            "html"(node, vm, value) {
                 node.innerHTML = this.getObjectValue(vm, value)
-             },
-             getObjectValue(vm, str){
+            },
+            getObjectValue(vm, str) {
                 let items = str.split(".")
                 return items.reduce((pre, current) => {
                     return pre[current]
                 }, vm)
             }
         }
-      
-        class Watcher{
-            constructor(vm, attr, cb){
+
+        class Watcher {
+            constructor(vm, attr, cb) {
                 this.vm = vm;
                 this.attr = attr;
                 this.cb = cb
                 this.oldValue = this.getOldValue()
             }
-            getOldValue(){
+            getOldValue() {
                 Dep.target = this
                 let oldValue = CompilerUtil.getObjectValue(this.vm, this.attr)
                 Dep.target = null;
+                // console.log(this.attr, oldValue);
                 return oldValue
             }
-            upData(){
+            upData() {
                 let newValue = CompilerUtil.getObjectValue(this.vm, this.attr)
-                if(this.oldValue !== newValue){
+                if (this.oldValue !== newValue) {
                     this.cb(newValue, this.oldValue)
                 }
             }
         }
-
-        class Dep{
-            constructor(){
-                  this.sub = []
+        // 计算属性 比如需要计算是 eg "123445".split
+        class Dep {
+            constructor() {
+                this.sub = []
             }
-            addSub(watcher){
+            addSub(watcher) {
                 this.sub.push(watcher)
             }
-            notify(){
+            notify() {
                 this.sub.forEach(watcher => {
                     watcher.upData()
                 })
@@ -220,17 +257,34 @@
         let vm = new VUE({
             el: "#app",
             data: {
-                // name: "zs",
+                name: "zs",
                 age: 23,
+                // person: "man",
+                // data: "123455"
                 // gender: {
                 //     man: "zs",
                 //     female: "ww"
                 // },
                 // html: "<h1>我是html</h1>",
                 // text: "我是text"
+            },
+            methods: {
+                myFn() {
+                    console.log(this);
+                },
+            },
+            computed: {
+                getName() {
+                    // return this.name.split("").reverse().join("");
+                    return this.name + 777;
+                }
             }
         });
-        new Observer(obj);
+        /*    console.log(vm);
+           for (let key in vm) {
+               console.log(key);
+           }
+           new Observer(obj); */
         // obj.name = {
         //     zs: "male",
         //     ww: "female",
@@ -238,18 +292,21 @@
         // obj.name.zs = "23";
         // obj.name = ""
 
-
-  /*       let obj111 = {
-            name: "zs"
-        }
-        Object.defineProperty(obj111, "name", {
-            get(){
-                console.log("执行了get");
-            },
-            set(newValue){
-
-            }
-        }) */
+        /*       let obj111 = {
+                  name: "zs"
+              }
+              Object.defineProperty(obj111, "name", {
+                  get(){
+                      console.log("执行了get");
+                  },
+                  set(newValue){
+      
+                  }
+              }) */
+        // console.log("123".split(""), "反转");
+        window.addEventListener("hashchange", () => {
+            console.log(location.hash.slice(1));
+        })
     </script>
 </body>
 
